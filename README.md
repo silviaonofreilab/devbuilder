@@ -171,6 +171,8 @@ make api-ready TARGET=vps                 # terminal 2: uses VPS_API_TOKEN
 make api-ask-smoke TARGET=vps
 ```
 
+If after `make droplet-tunnel` the `System restart required` message is displayed, type `reboot` wait 30s-60s and `make droplet-tunnel` again.
+
 Open your public hostname in a private browser window. Confirm that Cloudflare Access requires authentication before displaying the Gradio UI.
 
 ### Teardown
