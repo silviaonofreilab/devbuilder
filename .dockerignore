@@ -1,0 +1,67 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info/
+*.egg-info
+.eggs/
+.eggs
+build/
+dist/
+wheels/
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Deployment state (written by devbuilder-deploy)
+.devbuilder/
+
+# Droplet cloud-init: operator config, not part of any image
+configs/droplet_init.yaml
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Project artifacts
+runs/
+artifacts/
+data/
+!**/.gitkeep
+
+# Tests and docs
+tests/
+docs/
+*.md
+!README.md
+
+# Container/infra files
+docker/
+compose.yaml
+compose.*.yaml
+Dockerfile*
+.dockerignore
+
+# Local notebooks/scratch
+*.ipynb
+notebooks/
+scratch/
+
+# Pre-commit
+.pre-commit-config.yaml

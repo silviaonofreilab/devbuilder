@@ -1,0 +1,123 @@
+# Local development stack: Qdrant + DevBuilder export, indexer, API.
+#
+# Profiles: long-running services are "local" (or "vps" via the overlay);
+# the one-shot jobs (export, indexer) are "jobs" so `up` never runs them.
+# Compose enables a profile automatically when its service is targeted
+# explicitly, so `compose run --rm export` needs no --profile flag.
+#
+# This file is the base for local dev. For VPS deployment, layer the
+# production overlay (pulls images from GHCR, adds resource limits, etc.):
+#   docker compose -f compose.yaml -f compose.vps.yaml --profile vps up -d
+
+services:
+  # Qdrant runs without an API key. That is a deliberate assumption, not an
+  # oversight: it is reachable only on the compose network (the VPS overlay
+  # publishes no ports), only the api and the indexer job talk to it, and the
+  # API in front of it is the auth boundary. If
+  # Qdrant ever gets a published port or a second client, add QDRANT__SERVICE__API_KEY.
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: devbuilder-qdrant
+    profiles: ["local"]
+    # Local ports bind to loopback only: Qdrant has no auth and the UI holds
+    # the API token, so neither should be reachable from the LAN by default.
+    ports:
+      - "127.0.0.1:6333:6333"   # REST
+      - "127.0.0.1:6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  export:
+    build:
+      context: .
+      dockerfile: docker/export.Dockerfile
+      args:
+        GHCR_OWNER: ${GHCR_OWNER:?set GHCR_OWNER in .env}
+    image: devbuilder-export:dev
+    pull_policy: build
+    container_name: devbuilder-export
+    profiles: ["jobs"]
+    # Each service gets only the variables it uses (no env_file): a container
+    # never sees provisioning credentials or another service's secrets.
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}   # gated/private models only
+    volumes:
+      - ./artifacts/models:/app/artifacts/models
+
+  indexer:
+    build:
+      context: .
+      dockerfile: docker/indexer.Dockerfile
+      args:
+        GHCR_OWNER: ${GHCR_OWNER:?set GHCR_OWNER in .env}
+    image: devbuilder-indexer:dev
+    pull_policy: build
+    container_name: devbuilder-indexer
+    profiles: ["jobs"]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+    volumes:
+      - ./artifacts/models:/app/artifacts/models:ro
+      - ./data/raw:/app/data/raw:ro
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      args:
+        GHCR_OWNER: ${GHCR_OWNER:?set GHCR_OWNER in .env}
+    image: devbuilder-api:dev
+    pull_policy: build
+    container_name: devbuilder-api
+    profiles: ["local"]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: "6333"
+      API_TOKEN: ${API_TOKEN:?set API_TOKEN in .env}
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+      # From the deployment state: `make` exports it locally; on the VPS the
+      # rendered .env in the project dir supplies it to interpolation.
+      VLLM_ENDPOINT: ${VLLM_ENDPOINT:-}
+    volumes:
+      - ./artifacts/models:/app/artifacts/models:ro
+      - ./data/raw:/app/data/raw:ro
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui.Dockerfile
+      args:
+        GHCR_OWNER: ${GHCR_OWNER:?set GHCR_OWNER in .env}
+    image: devbuilder-ui:dev
+    pull_policy: build
+    container_name: devbuilder-ui
+    profiles: ["local", "ui"]
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:7860:7860"
+    environment:
+      API_BASE_URL: http://api:8080
+      API_TOKEN: ${API_TOKEN:?set API_TOKEN in .env}
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:

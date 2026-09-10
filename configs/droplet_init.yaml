@@ -1,0 +1,28 @@
+#cloud-config
+# DevBuilder droplet bootstrap.
+#
+# Runs once at first boot. Installs the Docker engine + compose plugin and
+# make, so the droplet is deploy-ready when `cloud-init status --wait` returns.
+#
+# Docker comes from Ubuntu's own signed archive (docker.io, docker-compose-v2)
+# rather than a curl-piped install script: apt verifies signatures, and the
+# version follows the Ubuntu release (24.04 in Sep 2026: Docker 29, Compose
+# 2.40; the overlay's `!reset`/`!override` need Compose >= 2.24).
+#
+# package_upgrade applies pending security updates at first boot; a fresh
+# image is typically a hundred updates behind.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - make
+  - docker.io
+  - docker-compose-v2
+
+runcmd:
+  - systemctl enable --now docker
+  # Prepare the deployment directory and the file ownership.
+  - mkdir -p /opt/devbuilder/artifacts/models
+  - chown -R 1000:1000 /opt/devbuilder

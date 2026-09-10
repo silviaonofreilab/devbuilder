@@ -1,0 +1,81 @@
+# VPS overlay for compose.yaml.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  qdrant:
+    profiles: ["vps"]
+    ports: !reset []
+    volumes: !override
+      - /opt/devbuilder/qdrant_data:/qdrant/storage
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1200M
+
+  export:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/devbuilder-export:${EXPORT_TAG:?set EXPORT_TAG}
+    pull_policy: always
+    volumes: !override
+      - /opt/devbuilder/artifacts/models:/app/artifacts/models
+    logging: *default-logging
+
+
+  indexer:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/devbuilder-indexer:${INDEXER_TAG:?set INDEXER_TAG}
+    pull_policy: always
+    volumes: !override
+      - /opt/devbuilder/artifacts/models:/app/artifacts/models:ro
+      - /opt/devbuilder/data/raw:/app/data/raw:ro
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 2000M
+
+  api:
+    profiles: ["vps"]
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/devbuilder-api:${API_TAG:?set API_TAG}
+    pull_policy: always
+    ports: !override
+      - "127.0.0.1:8080:8080"
+    volumes: !override
+      - /opt/devbuilder/artifacts/models:/app/artifacts/models:ro
+      - /opt/devbuilder/data/raw:/app/data/raw:ro
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 1800M
+
+  ui:
+    profiles: ["vps"]
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER:?set GHCR_OWNER}/devbuilder-ui:${UI_TAG:?set UI_TAG}
+    pull_policy: always
+    ports: !reset []
+    logging: *default-logging
+
+  # Public ingress. The tunnel forwards the demo hostname to the UI, which
+  # holds the API token, so the hostname itself is the auth boundary: it must
+  # be behind a Cloudflare Access application (identity gate) and a
+  # rate-limit rule. Both live in the Cloudflare dashboard, not in this repo.
+  cloudflared:
+    profiles: ["vps"]
+    image: cloudflare/cloudflared:${CLOUDFLARE_TAG:?set CLOUDFLARE_TAG}
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN}
+    depends_on:
+      ui:
+        condition: service_started
+    restart: unless-stopped
+    logging: *default-logging

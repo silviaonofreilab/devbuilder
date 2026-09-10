@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+
+# Environment
+.venv/
+.env
+.env.*
+!.env.example
+
+# Deployment state (written by devbuilder-deploy)
+.devbuilder/
+
+# Run artifacts
+runs/
+artifacts/models/*
+artifacts/vectorstores/*
+data/processed/*
+!**/.gitkeep
+
+# OS / tooling
+.DS_Store
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+*.pid
